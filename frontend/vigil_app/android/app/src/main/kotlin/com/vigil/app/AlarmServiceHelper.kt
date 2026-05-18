@@ -239,6 +239,39 @@ class AlarmServiceHelper(private val context: Context) {
     /**
      * Stop vibration.
      */
+    /**
+     * Launch MainActivity as a wake intent — turns the screen on, shows over
+     * the lock screen, and tells Flutter to navigate to the safety check route.
+     * This is what makes the lock-screen safety check appear automatically
+     * when the AI detects an extraction while the phone is sleeping/locked.
+     */
+    fun launchWakeActivity(route: String) {
+        try {
+            // First acquire a wake lock so the screen turns on
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or
+                        PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                        PowerManager.ON_AFTER_RELEASE,
+                "vigil:wake_screen_lock"
+            )
+            wakeLock?.acquire(60 * 1000L)
+
+            // Then launch MainActivity with the launch route extra
+            val intent = android.content.Intent(context, MainActivity::class.java).apply {
+                action = android.content.Intent.ACTION_MAIN
+                addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(MainActivity.EXTRA_LAUNCH_ROUTE, route)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun stopVibration() {
         try {
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

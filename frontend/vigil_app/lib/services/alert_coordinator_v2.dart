@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'ai_sensor_fusion_engine.dart';
 import 'behavioral_context_analyzer.dart';
 import 'sensor_manager_v2.dart';
@@ -8,6 +9,8 @@ import 'camera_service.dart';
 import 'location_service.dart';
 import 'notification_service.dart';
 import 'api_service.dart';
+import 'wake_intent_service.dart';
+import '../utils/navigation_service.dart';
 
 /// Alert Coordinator V2 — The upgraded brain of Vigil.
 ///
@@ -37,6 +40,10 @@ class AlertCoordinatorV2 {
   final LocationService _location = LocationService();
   final NotificationService _notifications = NotificationService();
   final ApiService _api = ApiService();
+  final WakeIntentService _wakeIntent = WakeIntentService();
+
+  // Native channel for direct wake activity launches
+  static const MethodChannel _alarmChannel = MethodChannel('com.vigil.app/alarm');
 
   // State
   bool _isInitialized = false;
@@ -72,6 +79,7 @@ class AlertCoordinatorV2 {
     _isInitialized = true;
 
     await _notifications.initialize();
+    await _wakeIntent.initialize();
 
     // Wire AI fusion engine events
     _sensorManager.fusionEngine.onExtractionDetected = _onExtractionDetected;
@@ -191,25 +199,58 @@ class AlertCoordinatorV2 {
     onStatusMessage?.call('Phone in hand — monitoring');
   }
 
-  /// CRITICAL: Extraction detected by AI fusion engine
+  /// CRITICAL: Extraction detected by AI fusion engine.
+  /// This is the entry point for the entire emergency flow.
+  ///
+  /// Flow:
+  /// 1. Check we should actually trigger (not already in another phase)
+  /// 2. Capture intruder photo IMMEDIATELY (don't wait for screen)
+  /// 3. Wake the screen via NATIVE wake intent (works even when locked)
+  /// 4. Native opens MainActivity with showWhenLocked + turnScreenOn
+  /// 5. Native sends route to Dart, NavigationService pushes /lock-screen-safety
+  /// 6. Lock screen tries face verification automatically
+  /// 7. If face fails → countdown + multi-layer auth UI
+  /// 8. If countdown expires → escalate to /emergency-active
   void _onExtractionDetected() {
     if (!_isProtectionActive) return;
     if (_state == ProtectionState.graceCountdown ||
-        _state == ProtectionState.alarm) return;
+        _state == ProtectionState.alarm ||
+        _state == ProtectionState.faceVerification) return;
 
-    debugPrint('[Vigil CoordV2] EXTRACTION DETECTED — starting verification flow');
+    debugPrint('[Vigil CoordV2] EXTRACTION DETECTED — waking screen');
 
-    // Step 1: Attempt face verification (auto-cancel if owner's face detected)
     _updateState(ProtectionState.faceVerification);
+
+    // Capture photo immediately while phone may still be in motion (intruder evidence)
+    _camera.captureIntruderPhoto();
+
+    // Trigger native wake — this brings the safety screen up over the lock screen
+    _launchSafetyScreenNative();
+
+    // Also trigger UI callback (in case app is in foreground)
     onShowFaceVerification?.call();
 
-    // Give face verification 2 seconds to work
+    // If face verification doesn't auto-cancel within 2s, start grace countdown
     Timer(const Duration(seconds: 2), () {
       if (_state == ProtectionState.faceVerification) {
-        // Face verification didn't auto-cancel — start grace countdown
         _startGraceCountdown();
       }
     });
+  }
+
+  /// Launch the safety screen via native wake intent so it shows over lock screen.
+  Future<void> _launchSafetyScreenNative() async {
+    try {
+      // Native launchSafetyActivity opens MainActivity with wake flags +
+      // sends route to Flutter via wake_intent channel
+      await _alarmChannel.invokeMethod('launchSafetyActivity', {
+        'route': 'lock-screen',
+      });
+    } catch (e) {
+      debugPrint('[Vigil CoordV2] Native wake failed: $e');
+      // Fallback: try Flutter-side navigation if app is already in foreground
+      NavigationService.pushNamed('/lock-screen-safety');
+    }
   }
 
   void _onThreatAssessed(ThreatAssessment threat) {
