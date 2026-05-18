@@ -13,6 +13,7 @@ class MainActivity : FlutterActivity() {
     private val PROXIMITY_CHANNEL = "com.vigil.app/proximity"
     private val LIGHT_CHANNEL = "com.vigil.app/light"
     private val ACCELEROMETER_CHANNEL = "com.vigil.app/accelerometer"
+    private val GYROSCOPE_CHANNEL = "com.vigil.app/gyroscope"
     private val ALARM_CHANNEL = "com.vigil.app/alarm"
     private val CAMERA_CHANNEL = "com.vigil.app/camera"
     private val NOTIFICATION_CHANNEL = "com.vigil.app/notifications"
@@ -56,6 +57,9 @@ class MainActivity : FlutterActivity() {
 
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, ACCELEROMETER_CHANNEL)
             .setStreamHandler(sensorService.getAccelerometerStreamHandler())
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, GYROSCOPE_CHANNEL)
+            .setStreamHandler(sensorService.getGyroscopeStreamHandler())
 
         // === ALARM METHOD CHANNEL ===
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL)

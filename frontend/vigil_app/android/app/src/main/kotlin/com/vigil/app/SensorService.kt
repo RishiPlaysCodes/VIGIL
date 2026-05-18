@@ -24,16 +24,19 @@ class SensorService(private val context: Context) {
     private val proximitySensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
     private val lightSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val gyroscope: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
     // Event sinks for streaming sensor data to Flutter
     private var proximityEventSink: EventChannel.EventSink? = null
     private var lightEventSink: EventChannel.EventSink? = null
     private var accelerometerEventSink: EventChannel.EventSink? = null
+    private var gyroscopeEventSink: EventChannel.EventSink? = null
 
     // Sensor listeners
     private var proximityListener: SensorEventListener? = null
     private var lightListener: SensorEventListener? = null
     private var accelerometerListener: SensorEventListener? = null
+    private var gyroscopeListener: SensorEventListener? = null
 
     /**
      * Check which sensors are available on this device.
@@ -42,7 +45,9 @@ class SensorService(private val context: Context) {
         return mapOf(
             "proximity" to (proximitySensor != null),
             "light" to (lightSensor != null),
-            "accelerometer" to (accelerometer != null)
+            "accelerometer" to (accelerometer != null),
+            "gyroscope" to (gyroscope != null),
+            "magnetometer" to (sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null)
         )
     }
 
@@ -197,6 +202,59 @@ class SensorService(private val context: Context) {
         accelerometerListener = null
     }
 
+    // === GYROSCOPE ===
+
+    /**
+     * Get EventChannel StreamHandler for gyroscope.
+     * Reports x, y, z rotation rate in rad/s.
+     * Used for extraction detection (sudden rotational motion = grab/snatch).
+     */
+    fun getGyroscopeStreamHandler(): EventChannel.StreamHandler {
+        return object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                gyroscopeEventSink = events
+                startGyroscopeListener()
+            }
+
+            override fun onCancel(arguments: Any?) {
+                stopGyroscopeListener()
+                gyroscopeEventSink = null
+            }
+        }
+    }
+
+    private fun startGyroscopeListener() {
+        if (gyroscope == null) return
+
+        gyroscopeListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                event?.let {
+                    val data = mapOf(
+                        "x" to it.values[0].toDouble(),
+                        "y" to it.values[1].toDouble(),
+                        "z" to it.values[2].toDouble()
+                    )
+                    gyroscopeEventSink?.success(data)
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        sensorManager.registerListener(
+            gyroscopeListener,
+            gyroscope,
+            SensorManager.SENSOR_DELAY_GAME // ~20ms for accurate rotation detection
+        )
+    }
+
+    private fun stopGyroscopeListener() {
+        gyroscopeListener?.let {
+            sensorManager.unregisterListener(it)
+        }
+        gyroscopeListener = null
+    }
+
     /**
      * Stop all sensor listeners. Called when activity is destroyed.
      */
@@ -204,8 +262,10 @@ class SensorService(private val context: Context) {
         stopProximityListener()
         stopLightListener()
         stopAccelerometerListener()
+        stopGyroscopeListener()
         proximityEventSink = null
         lightEventSink = null
         accelerometerEventSink = null
+        gyroscopeEventSink = null
     }
 }
