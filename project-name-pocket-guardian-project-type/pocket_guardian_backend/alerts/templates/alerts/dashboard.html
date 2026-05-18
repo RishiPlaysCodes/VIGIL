@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pocket Guardian Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #172033; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+    .hero { margin-bottom: 24px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card, table { background: white; border-radius: 16px; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
+    .card { padding: 18px; }
+    .label { color: #64748b; font-size: 14px; }
+    .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; overflow: hidden; }
+    th, td { padding: 14px 16px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    th { background: #0f766e; color: white; }
+    .pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; background: #fee2e2; color: #b91c1c; }
+    .queued { background: #fef3c7; color: #92400e; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Pocket Guardian Dashboard</h1>
+      <p>Recent alerts and notification activity.</p>
+    </section>
+
+    <section class="cards">
+      <div class="card"><div class="label">Total alerts</div><div class="value">{{ total_alerts }}</div></div>
+      <div class="card"><div class="label">Triggered</div><div class="value">{{ triggered_alerts }}</div></div>
+      <div class="card"><div class="label">Cancelled</div><div class="value">{{ cancelled_alerts }}</div></div>
+      <div class="card"><div class="label">Queued notifications</div><div class="value">{{ queued_notifications }}</div></div>
+    </section>
+
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Reason</th>
+          <th>Status</th>
+          <th>Location</th>
+          <th>Notification</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for alert in recent_alerts %}
+          <tr>
+            <td>{{ alert.user.username }}</td>
+            <td><a href="/api/alerts/{{ alert.id }}/">{{ alert.reason }}</a></td>
+            <td><span class="pill">{{ alert.get_status_display }}</span></td>
+            <td>{{ alert.latitude|default:"-" }}, {{ alert.longitude|default:"-" }}</td>
+            <td>
+              {% if alert.notifications.first %}
+                <span class="pill queued">{{ alert.notifications.first.get_status_display }}</span>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ alert.occurred_at }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">No alerts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <section class="card" style="margin-top: 24px;">
+      <div class="label">Latest shared locations</div>
+      {% for ping in latest_locations %}
+        <p>
+          {{ ping.user.username }} —
+          <a href="https://maps.google.com/?q={{ ping.latitude }},{{ ping.longitude }}">
+            {{ ping.latitude }}, {{ ping.longitude }}
+          </a>
+          at {{ ping.recorded_at }}
+        </p>
+      {% empty %}
+        <p>No live locations shared yet.</p>
+      {% endfor %}
+    </section>
+  </div>
+</body>
+</html>
