@@ -1,0 +1,80 @@
+name: vigil_app
+description: "Vigil - Your Personal Safety Guardian. Anti-theft and personal safety app."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking
+  http: ^1.1.0
+
+  # State Management
+  provider: ^6.1.0
+
+  # Local Storage
+  shared_preferences: ^2.2.0
+  flutter_secure_storage: ^9.0.0
+
+  # Sensors
+  sensors_plus: ^4.0.0
+
+  # Location
+  geolocator: ^11.0.0
+  geocoding: ^2.1.0
+
+  # Camera
+  camera: ^0.10.5
+
+  # Notifications
+  flutter_local_notifications: ^16.3.0
+
+  # Audio (alarm)
+  audioplayers: ^5.2.0
+
+  # Permissions
+  permission_handler: ^11.1.0
+
+  # Background Service
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+
+  # UI Enhancements
+  flutter_animate: ^4.3.0
+  shimmer: ^3.0.0
+  lottie: ^2.7.0
+  google_fonts: ^6.1.0
+
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.2.0
+  path_provider: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/sounds/
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Poppins-ExtraBold.ttf
+          weight: 800
