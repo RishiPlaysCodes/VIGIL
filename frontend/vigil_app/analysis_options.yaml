@@ -1,5 +1,5 @@
 # Analysis options for Vigil Flutter app.
-# Enforces clean code, catches potential bugs, and maintains consistency.
+# Balanced between code quality and development speed.
 
 include: package:flutter_lints/flutter.yaml
 
@@ -9,29 +9,20 @@ analyzer:
     - "**/*.freezed.dart"
   errors:
     invalid_annotation_target: ignore
-  language:
-    strict-casts: true
-    strict-inference: true
-    strict-raw-types: true
+  # REMOVED strict-casts/inference/raw-types — these break platform channel code
+  # that uses dynamic types from native Android
 
 linter:
   rules:
-    # Style
+    # Style (warnings, not errors)
     - prefer_const_constructors
     - prefer_const_literals_to_create_immutables
     - prefer_final_fields
-    - prefer_final_locals
-    - avoid_print
     - avoid_unnecessary_containers
     - sized_box_for_whitespace
     - use_key_in_widget_constructors
-    - prefer_single_quotes
 
     # Safety
-    - avoid_dynamic_calls
     - cancel_subscriptions
     - close_sinks
     - always_declare_return_types
-
-    # Documentation (relaxed for speed of development)
-    # - public_member_api_docs

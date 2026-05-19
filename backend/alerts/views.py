@@ -3,7 +3,9 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from django.db import models
 from django.utils import timezone
+from datetime import timedelta
 
 from .models import Alert, AlertEvidence, AlertLocationTrail
 from .serializers import (
