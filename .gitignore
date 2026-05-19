@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.env
+db.sqlite3
+*.sqlite3
+/backend/staticfiles/
+/backend/media/intruder_photos/
+
+# Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+*.iml
+*.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Android
+/frontend/vigil_app/android/.gradle/
+/frontend/vigil_app/android/app/debug/
+/frontend/vigil_app/android/app/profile/
+/frontend/vigil_app/android/app/release/
+*.apk
+*.aab
+
+# iOS
+/frontend/vigil_app/ios/Pods/
+/frontend/vigil_app/ios/.symlinks/

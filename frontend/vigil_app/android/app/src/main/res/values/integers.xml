@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App version code used in build config -->
+    <integer name="app_version">1</integer>
+</resources>
