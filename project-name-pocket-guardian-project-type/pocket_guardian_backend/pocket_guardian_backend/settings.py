@@ -22,11 +22,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+
+# Allow a temporary key ONLY during build-time management commands
+# (e.g. collectstatic in Docker), never for serving traffic.
 if not SECRET_KEY:
-    raise ValueError(
-        "DJANGO_SECRET_KEY environment variable is required. "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(50))\""
-    )
+    if os.getenv('DJANGO_BUILD_STEP') == '1':
+        SECRET_KEY = 'build-time-only-not-for-serving'
+    else:
+        raise ValueError(
+            "DJANGO_SECRET_KEY environment variable is required. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(50))\""
+        )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', '0') == '1'
@@ -65,6 +71,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'alerts.middleware.ContentLengthLimitMiddleware',
     'alerts.middleware.RequestLoggingMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -161,8 +168,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# WhiteNoise: serve compressed static files efficiently in production
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',

@@ -129,32 +129,35 @@ flutter run --dart-define=POCKET_GUARDIAN_API_URL=http://YOUR_IP:8000/api
 
 ## Production Deployment
 
-### Google Cloud (Recommended — FREE)
+### Google Cloud Run (Recommended — FREE forever)
 
-Deploy the backend to Google Cloud Run using the **$300 free trial credits**:
+Deploy the backend live with a single command, using Cloud Run's always-free tier + a free Neon PostgreSQL database:
 
 ```bash
-# 1. Install gcloud CLI and login
+# 1. Login and set project
 gcloud auth login
-gcloud config set project pocket-guardian-prod
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 
-# 2. Enable APIs
-gcloud services enable run.googleapis.com sqladmin.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
-
-# 3. Build & deploy (from pocket_guardian_backend directory)
-gcloud builds submit --tag asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest
+# 2. Deploy from source (one command — builds + deploys)
+cd pocket_guardian_backend
 gcloud run deploy pocket-guardian-backend \
-  --image=asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest \
-  --region=asia-south1 \
-  --allow-unauthenticated
+  --source . \
+  --region asia-south1 \
+  --allow-unauthenticated \
+  --set-env-vars "DJANGO_DEBUG=0" \
+  --set-env-vars "DJANGO_ALLOWED_HOSTS=*" \
+  --set-env-vars "DJANGO_SECRET_KEY=your-generated-secret" \
+  --set-env-vars "^@^DATABASE_URL=your-neon-postgres-url"
 
-# 4. Build Flutter APK pointing to Cloud Run URL
+# 3. Build Flutter APK pointing to the Cloud Run URL
+cd ../pocket_guardian
 flutter build apk --release \
   --dart-define=POCKET_GUARDIAN_API_URL=https://YOUR_CLOUD_RUN_URL/api \
   --dart-define=POCKET_GUARDIAN_ENV=production
 ```
 
-**Full step-by-step guide:** [docs/DEPLOY_GOOGLE_CLOUD.md](docs/DEPLOY_GOOGLE_CLOUD.md)
+Migrations run automatically on startup. **Full beginner walkthrough:** [docs/DEPLOY_GOOGLE_CLOUD.md](docs/DEPLOY_GOOGLE_CLOUD.md)
 
 ### Docker (Self-hosted)
 

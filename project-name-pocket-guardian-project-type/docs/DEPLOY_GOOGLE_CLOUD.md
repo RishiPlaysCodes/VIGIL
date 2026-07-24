@@ -1,378 +1,235 @@
-# Google Cloud Deployment Guide (FREE Tier)
+# Deploy to Google Cloud — Beginner Guide (100% FREE)
 
-> Deploy Pocket Guardian backend to Google Cloud **completely free** using Cloud Run + Cloud SQL.
+> This guide gets your backend live on the internet for **free**, step by step.
+> No prior cloud experience needed. Follow each step exactly.
 
----
+We'll use:
+- **Google Cloud Run** — runs your backend. Free forever (2 million requests/month).
+- **Neon** — free PostgreSQL database. Free forever (no credit card, no expiry).
 
-## What You'll Use (All Free)
+> **Why not Google's Cloud SQL database?** It costs ~$7/month (only free during the 90-day trial). Neon is free *forever*, so it's better for you. Your backend still runs on Google Cloud.
 
-| Service | Free Tier Limit | Our Usage |
-|---------|----------------|-----------|
-| **Cloud Run** | 2 million requests/month, 360,000 GB-seconds | Way under limit for personal use |
-| **Cloud SQL (PostgreSQL)** | Not free, but we use **$300 free trial credits** | ~$7/month (covered by credits) |
-| **Artifact Registry** | 500 MB storage free | Docker image storage |
-| **Cloud Storage** | 5 GB free | Media/photo storage |
-
-### Free Options:
-1. **$300 Free Trial** — New Google Cloud accounts get $300 credits for 90 days
-2. **Google Developer Student** — If you enrolled in GDSC, you might have credits
-3. **Always Free Tier** — Cloud Run stays free forever within limits
+**Total cost: ₹0 / $0** — permanently.
 
 ---
 
-## Prerequisites
+# Part 1: Create a Free Database (Neon) — 5 minutes
 
-- Google account (Gmail)
-- Credit/Debit card (for verification only — won't be charged on free tier)
-- `gcloud` CLI installed on your PC
+1. Go to **https://neon.tech** and click **Sign up** (use your Google account)
+2. Click **Create Project**
+   - Name: `pocket-guardian`
+   - Region: pick the one closest to you (e.g. Singapore for India)
+3. After it's created, click **Connect** / **Connection String**
+4. Copy the connection string. It looks like:
+   ```
+   postgresql://user:password@ep-xxxx.ap-southeast-1.aws.neon.tech/pocket-guardian?sslmode=require
+   ```
+5. **Save this somewhere** — you'll paste it in Part 3.
 
----
-
-## Step 0: Check Your Google Cloud / Student Account
-
-### If you enrolled in Google Developer Student Club (GDSC):
-
-1. Go to: https://cloud.google.com/edu/students
-2. Check if you have active credits under your account
-3. OR go to: https://console.cloud.google.com/billing
-4. If you see a billing account with credits, you're good!
-
-### If you're new to Google Cloud:
-
-1. Go to: https://cloud.google.com/free
-2. Click **"Get started for free"**
-3. Sign in with your Google account
-4. Enter card details (verification only, **FREE trial = $300 credits for 90 days**)
-5. You'll see "Free Trial" active in console
+> Django needs `postgres://` — if your string starts with `postgresql://`, that's fine, it works too.
 
 ---
 
-## Step 1: Install Google Cloud CLI
+# Part 2: Set Up Google Cloud — 10 minutes
 
-### Windows (PowerShell):
-```powershell
-# Download and run installer
-(New-Object Net.WebClient).DownloadFile("https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe", "$env:temp\GoogleCloudSDKInstaller.exe")
-& "$env:temp\GoogleCloudSDKInstaller.exe"
-```
+## 2.1 Create account (if you don't have one)
 
-### Mac:
-```bash
-brew install google-cloud-sdk
-```
+1. Go to **https://cloud.google.com/free**
+2. Click **Get started for free**
+3. Sign in with Google, enter card details (for verification — **you won't be charged** on free tier)
 
-### Linux:
-```bash
-curl https://sdk.cloud.google.com | bash
-exec -l $SHELL
-```
+## 2.2 Install the gcloud CLI
 
-### Verify installation:
+- **Windows:** Download and run the installer from
+  https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe
+- **Mac:** `brew install --cask google-cloud-sdk`
+- **Linux:** `curl https://sdk.cloud.google.com | bash` then restart your terminal
+
+Verify it works:
 ```bash
 gcloud --version
 ```
 
----
-
-## Step 2: Login & Create Project
+## 2.3 Login and create a project
 
 ```bash
-# Login to Google Cloud
+# Login (opens browser)
 gcloud auth login
 
-# Create a new project (choose a unique name)
-gcloud projects create pocket-guardian-prod --name="Pocket Guardian"
+# Create a project (the ID must be globally unique — add numbers if taken)
+gcloud projects create pocket-guardian-12345 --name="Pocket Guardian"
 
-# Set it as active project
-gcloud config set project pocket-guardian-prod
+# Set it as your active project
+gcloud config set project pocket-guardian-12345
+```
 
-# Enable billing (links to your free trial)
-# Go to: https://console.cloud.google.com/billing
-# Link the project to your billing account
+> Replace `pocket-guardian-12345` everywhere with your actual project ID.
 
-# Enable required APIs
-gcloud services enable run.googleapis.com
-gcloud services enable sqladmin.googleapis.com
-gcloud services enable artifactregistry.googleapis.com
-gcloud services enable cloudbuild.googleapis.com
-gcloud services enable secretmanager.googleapis.com
+## 2.4 Link billing (required even for free tier)
+
+1. Go to **https://console.cloud.google.com/billing**
+2. Link your project to your billing account (the free trial account is fine)
+
+## 2.5 Enable the services we need
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 ```
 
 ---
 
-## Step 3: Create PostgreSQL Database (Cloud SQL)
+# Part 3: Deploy the Backend — 5 minutes
+
+## 3.1 Generate a secret key
 
 ```bash
-# Create a PostgreSQL instance (smallest = cheapest, covered by free credits)
-gcloud sql instances create pocket-guardian-db \
-  --database-version=POSTGRES_16 \
-  --tier=db-f1-micro \
-  --region=asia-south1 \
-  --storage-size=10GB \
-  --storage-type=HDD
-
-# Set the database password
-gcloud sql users set-password postgres \
-  --instance=pocket-guardian-db \
-  --password=YOUR_STRONG_PASSWORD_HERE
-
-# Create the database
-gcloud sql databases create pocket_guardian \
-  --instance=pocket-guardian-db
-```
-
-> **Note:** `asia-south1` = Mumbai. Choose the region closest to you.
-> `db-f1-micro` is the cheapest tier (~$7/month, covered by $300 credits).
-
-### Get the connection name (you'll need this later):
-```bash
-gcloud sql instances describe pocket-guardian-db --format="value(connectionName)"
-# Output will be like: pocket-guardian-prod:asia-south1:pocket-guardian-db
-```
-
----
-
-## Step 4: Store Secrets Securely
-
-```bash
-# Generate a secret key
 python -c "import secrets; print(secrets.token_urlsafe(50))"
-# Copy the output
-
-# Store secrets in Google Secret Manager
-echo -n "YOUR_GENERATED_SECRET_KEY" | gcloud secrets create django-secret-key --data-file=-
-echo -n "YOUR_STRONG_PASSWORD_HERE" | gcloud secrets create db-password --data-file=-
 ```
+Copy the output — this is your `DJANGO_SECRET_KEY`.
 
----
+## 3.2 Deploy with ONE command
 
-## Step 5: Create Artifact Registry (Docker Image Storage)
+Navigate to the backend folder and run:
 
 ```bash
-gcloud artifacts repositories create pocket-guardian \
-  --repository-format=docker \
-  --location=asia-south1 \
-  --description="Pocket Guardian Docker images"
-```
-
----
-
-## Step 6: Build & Push Docker Image
-
-```bash
-# Navigate to the backend directory
 cd VIGIL/project-name-pocket-guardian-project-type/pocket_guardian_backend
 
-# Configure Docker authentication
-gcloud auth configure-docker asia-south1-docker.pkg.dev
-
-# Build and push using Cloud Build (no local Docker needed!)
-gcloud builds submit \
-  --tag asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest
-```
-
-> This builds the Docker image in the cloud and stores it. No Docker needed on your PC!
-
----
-
-## Step 7: Deploy to Cloud Run
-
-```bash
-# Get your connection name from Step 3
-CONNECTION_NAME=$(gcloud sql instances describe pocket-guardian-db --format="value(connectionName)")
-
-# Deploy!
 gcloud run deploy pocket-guardian-backend \
-  --image=asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest \
-  --region=asia-south1 \
-  --platform=managed \
+  --source . \
+  --region asia-south1 \
   --allow-unauthenticated \
-  --port=8000 \
-  --memory=512Mi \
-  --cpu=1 \
-  --min-instances=0 \
-  --max-instances=2 \
-  --add-cloudsql-instances=$CONNECTION_NAME \
-  --set-env-vars="DJANGO_DEBUG=0" \
-  --set-env-vars="DJANGO_ALLOWED_HOSTS=*" \
-  --set-env-vars="DATABASE_URL=postgres://postgres:YOUR_STRONG_PASSWORD_HERE@/pocket_guardian?host=/cloudsql/$CONNECTION_NAME" \
-  --set-env-vars="SECURE_SSL_REDIRECT=0" \
-  --set-secrets="DJANGO_SECRET_KEY=django-secret-key:latest"
+  --set-env-vars "DJANGO_DEBUG=0" \
+  --set-env-vars "DJANGO_ALLOWED_HOSTS=*" \
+  --set-env-vars "SECURE_SSL_REDIRECT=0" \
+  --set-env-vars "DJANGO_SECRET_KEY=PASTE_YOUR_SECRET_KEY_HERE" \
+  --set-env-vars "^@^DATABASE_URL=PASTE_YOUR_NEON_STRING_HERE"
 ```
 
-### After deployment, you'll see:
+**Important notes:**
+- Replace `PASTE_YOUR_SECRET_KEY_HERE` with the key from step 3.1
+- Replace `PASTE_YOUR_NEON_STRING_HERE` with your Neon connection string from Part 1
+- The `^@^` before DATABASE_URL tells gcloud to use `@` as the separator instead of `,` — needed because the database URL contains commas/special characters. Keep it exactly as shown.
+- `asia-south1` is Mumbai. Change if you prefer another region.
+
+The first time, gcloud will ask:
+- *"Deploy from source? This will create an Artifact Registry repository"* → type **Y**
+- It builds your Docker image in the cloud (~3-5 min) and deploys it
+
+## 3.3 Get your live URL
+
+When it finishes, you'll see:
 ```
-Service [pocket-guardian-backend] revision [...] has been deployed
-Service URL: https://pocket-guardian-backend-xxxxx-xx.a.run.app
+Service URL: https://pocket-guardian-backend-xxxxx-el.a.run.app
 ```
 
-**Save this URL! This is your production backend.**
+**This is your live backend!** Migrations run automatically on startup.
+
+## 3.4 Test it
+
+Open in your browser:
+```
+https://YOUR_SERVICE_URL/api/dashboard/
+```
+You should see the guardian dashboard page.
 
 ---
 
-## Step 8: Run Database Migrations
+# Part 4: Connect Your Phone App — 5 minutes
+
+## 4.1 Build the APK pointing to your live backend
 
 ```bash
-# Run migrations on the deployed service
-gcloud run jobs create migrate-db \
-  --image=asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest \
-  --region=asia-south1 \
-  --add-cloudsql-instances=$CONNECTION_NAME \
-  --set-env-vars="DJANGO_DEBUG=0" \
-  --set-env-vars="DATABASE_URL=postgres://postgres:YOUR_STRONG_PASSWORD_HERE@/pocket_guardian?host=/cloudsql/$CONNECTION_NAME" \
-  --set-secrets="DJANGO_SECRET_KEY=django-secret-key:latest" \
-  --command="python" \
-  --args="manage.py,migrate,--noinput"
+cd VIGIL/project-name-pocket-guardian-project-type/pocket_guardian
 
-# Execute the migration job
-gcloud run jobs execute migrate-db --region=asia-south1 --wait
-```
-
----
-
-## Step 9: Connect Flutter App to Production Backend
-
-```bash
-cd pocket_guardian
-
-# Build APK pointing to your Cloud Run URL
 flutter build apk --release \
-  --dart-define=POCKET_GUARDIAN_API_URL=https://pocket-guardian-backend-xxxxx-xx.a.run.app/api \
+  --dart-define=POCKET_GUARDIAN_API_URL=https://YOUR_SERVICE_URL/api \
   --dart-define=POCKET_GUARDIAN_ENV=production
 ```
 
-Transfer the APK to your phone:
-```bash
-# If phone is connected via USB:
-flutter install
+> Replace `YOUR_SERVICE_URL` with your Cloud Run URL from step 3.3.
 
-# Or find APK at:
-# build/app/outputs/flutter-apk/app-release.apk
-# Transfer via WhatsApp, Drive, cable, etc.
+## 4.2 Install on your phone
+
+The APK is at:
+```
+build/app/outputs/flutter-apk/app-release.apk
 ```
 
----
+Options to install:
+- **USB cable connected:** run `flutter install`
+- **No cable:** Send the APK file to your phone (WhatsApp/Drive/email), open it, tap Install. You may need to allow "Install from unknown sources" in settings.
 
-## Step 10: Verify Everything Works
+## 4.3 Use it!
 
-1. **Open browser:** `https://YOUR_CLOUD_RUN_URL/api/dashboard/`
-2. **Open app on phone:** Create account, set PIN, enable Pocket Mode
-3. **Trigger a test alert:** Use the strong movement button
-4. **Check dashboard:** See the alert appear
+1. Open the app → Create account
+2. Set your security PIN
+3. Add emergency contact
+4. Enable Pocket Mode and test
 
----
-
-## Cost Breakdown (You Won't Pay Anything)
-
-| Service | Monthly Cost | Free Coverage |
-|---------|-------------|---------------|
-| Cloud Run | $0 | Always free (under 2M requests) |
-| Cloud SQL (db-f1-micro) | ~$7-9 | Covered by $300 free credits |
-| Artifact Registry | $0 | Under 500MB free |
-| Cloud Build | $0 | 120 min/day free |
-| **Total** | **~$7-9/month** | **$300 credits = ~33 months free** |
-
-After $300 credits expire, you can:
-- Downgrade to Cloud SQL Starter (free tier when available)
-- Switch to Supabase free tier for PostgreSQL
-- Or just keep paying ~$7/month
+Check the dashboard (`https://YOUR_SERVICE_URL/api/dashboard/`) to see your alerts appear live.
 
 ---
 
-## Updating Your App After Code Changes
+# Updating After Code Changes
 
-### Redeploy backend:
+Whenever you change backend code, redeploy with:
 ```bash
 cd pocket_guardian_backend
-
-# Build and push new image
-gcloud builds submit \
-  --tag asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest
-
-# Deploy new version
-gcloud run deploy pocket-guardian-backend \
-  --image=asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest \
-  --region=asia-south1
+gcloud run deploy pocket-guardian-backend --source . --region asia-south1
 ```
+(It remembers your env vars from last time.)
 
-### Rebuild Flutter app:
+When you change app code, rebuild the APK (step 4.1) and reinstall.
+
+---
+
+# Create an Admin Login (optional)
+
+To access `/admin/` and view all data:
 ```bash
-cd pocket_guardian
-flutter build apk --release \
-  --dart-define=POCKET_GUARDIAN_API_URL=https://YOUR_CLOUD_RUN_URL/api \
-  --dart-define=POCKET_GUARDIAN_ENV=production
+# One-off command to create a superuser
+gcloud run services proxy pocket-guardian-backend --region asia-south1
+# Then in another terminal, or use the Cloud Run console "Execute" feature
 ```
+
+Easier: temporarily set `DJANGO_DEBUG=1`, then use the signup API, or create the user via a Cloud Run Job. Ask me if you need this.
 
 ---
 
-## One-Line Deploy Script
+# Troubleshooting
 
-Create `deploy.sh` in your project root:
+| Problem | Fix |
+|---------|-----|
+| `billing account not found` | Link billing at console.cloud.google.com/billing |
+| Build fails | Make sure you're in the `pocket_guardian_backend` folder (where the Dockerfile is) |
+| `DATABASE_URL` error | Check the `^@^` prefix is included; verify Neon string is correct |
+| Dashboard shows 500 error | Check logs: `gcloud run services logs read pocket-guardian-backend --region asia-south1` |
+| App can't connect | Verify the URL in `--dart-define` matches your Cloud Run URL exactly, with `/api` at the end |
+| "Service Unavailable" first load | Normal cold start — wait 5 seconds and refresh |
 
+### View live logs anytime:
 ```bash
-#!/bin/bash
-set -e
-
-PROJECT_ID="pocket-guardian-prod"
-REGION="asia-south1"
-IMAGE="asia-south1-docker.pkg.dev/$PROJECT_ID/pocket-guardian/backend:latest"
-
-echo "Building and pushing Docker image..."
-cd pocket_guardian_backend
-gcloud builds submit --tag $IMAGE --project $PROJECT_ID
-
-echo "Deploying to Cloud Run..."
-gcloud run deploy pocket-guardian-backend \
-  --image=$IMAGE \
-  --region=$REGION \
-  --project=$PROJECT_ID
-
-echo "Done! Check your service URL above."
+gcloud run services logs read pocket-guardian-backend --region asia-south1 --limit 50
 ```
 
 ---
 
-## Troubleshooting
+# Cost Reminder
 
-| Problem | Solution |
-|---------|----------|
-| "Billing not enabled" | Go to console.cloud.google.com/billing and link project |
-| "Permission denied" | Run `gcloud auth login` again |
-| Cloud Build fails | Check Dockerfile exists in the directory |
-| App can't reach backend | Check the Cloud Run URL is correct in --dart-define |
-| Database connection error | Verify CONNECTION_NAME and password are correct |
-| "Cold start" slow first request | Normal for min-instances=0, first request takes 3-5 sec |
-| Credits running low | Check at console.cloud.google.com/billing |
+- **Cloud Run:** Free (you'd need 2 million requests/month to pay anything)
+- **Neon database:** Free forever
+- **Cloud Build:** 120 free build-minutes/day (each deploy uses ~3-4 min)
+
+You will **not** be charged for normal personal use. To be 100% safe, set a budget alert:
+1. Go to https://console.cloud.google.com/billing/budgets
+2. Create a budget of ₹100 with email alerts
 
 ---
 
-## Alternative: Even Simpler (No Cloud SQL)
+# About Your Google Developer Student Enrollment
 
-If you want **zero cost** after free trial expires, use SQLite on Cloud Run:
+- If you did **Google Cloud Study Jams / GDSC**, you may have gotten Cloud Skills Boost credits — those are for *learning labs*, not for hosting your own app.
+- The **$300 free trial** (Part 2) is separate and available to everyone.
+- For this project you don't even need the $300 — Cloud Run's always-free tier + Neon covers everything.
 
-> **Warning:** SQLite on Cloud Run loses data when the container restarts. Only use for testing.
-
-```bash
-gcloud run deploy pocket-guardian-backend \
-  --source=. \
-  --region=asia-south1 \
-  --allow-unauthenticated \
-  --set-env-vars="DJANGO_SECRET_KEY=your-key,DJANGO_DEBUG=0,DJANGO_ALLOWED_HOSTS=*"
-```
-
-For a permanent free database, consider:
-- **Supabase** (free PostgreSQL, 500 MB)
-- **Neon** (free PostgreSQL, 512 MB)
-- **PlanetScale** (free MySQL, 5 GB)
-
----
-
-## Google Developer Student Club (GDSC) Specific
-
-If you enrolled in GDSC:
-1. Check https://cloud.google.com/edu/students for any active programs
-2. Some GDSC events give out **Qwiklabs credits** — these work for Cloud Skills Boost labs but NOT for deploying your own apps
-3. The **$300 free trial** is separate from GDSC — anyone can get it
-4. If your campus had a "Google Cloud Study Jam" you might have gotten extra credits — check your billing at console.cloud.google.com
-
-**Bottom line:** Just sign up for the regular $300 free trial. It's the easiest path.
+Check any credits at: https://console.cloud.google.com/billing

@@ -26,9 +26,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ─── Production Stage ─────────────────────────────────────────────────────────
 FROM base AS production
 
-# Create non-root user
-RUN groupadd -r guardian && useradd -r -g guardian guardian
-
 # Copy installed packages from dependencies stage
 COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
@@ -36,25 +33,18 @@ COPY --from=dependencies /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput 2>/dev/null || true
+# Collect static files (uses a temporary build-only secret key)
+RUN DJANGO_BUILD_STEP=1 python manage.py collectstatic --noinput
 
 # Create media directory
-RUN mkdir -p /app/media && chown -R guardian:guardian /app/media
+RUN mkdir -p /app/media
 
-# Switch to non-root user
-USER guardian
+# Cloud Run injects the PORT env var (default 8080). Gunicorn must bind to it.
+ENV PORT=8080
+EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/dashboard/ || exit 1
+# Entrypoint runs migrations then starts the server
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-EXPOSE 8000
-
-# Run with gunicorn
-CMD ["gunicorn", "pocket_guardian_backend.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "3", \
-     "--timeout", "120", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["/entrypoint.sh"]
