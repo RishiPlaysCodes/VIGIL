@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.so
+.env
+.env.local
+db.sqlite3
+db.sqlite3-journal
+media/intruder_photos/
+.git/
+.venv/
+venv/
+*.egg-info/
+.idea/
+.vscode/

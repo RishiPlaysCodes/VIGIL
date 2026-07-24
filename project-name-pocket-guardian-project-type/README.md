@@ -1,104 +1,341 @@
-# Pocket Guardian
+# Pocket Guardian (VIGIL)
 
-Pocket Guardian is a mobile safety and anti-theft MVP made of:
+> Smart anti-theft and personal safety mobile app with real-time alerting, evidence capture, and guardian notifications.
 
-- a Flutter mobile app
-- a Django backend
-- a browser dashboard for alert history and notification status
+## Architecture Overview
 
-## What is already built
+```
++─────────────────────+     HTTPS      +──────────────────────+
+|   Flutter Mobile    | ◄────────────► |   Django Backend     |
+|   (Android / iOS)   |                |   (REST API)         |
++─────────────────────+                +──────────────────────+
+       │                                       │
+       │ Native Platform                       │ Services
+       ├─ Foreground Service (sensors)         ├─ PostgreSQL
+       ├─ Camera2 (intruder photo)             ├─ Email (SMTP)
+       ├─ SMS Manager                          ├─ SMS (Twilio/MSG91)
+       └─ AlarmManager (scheduling)            └─ File Storage (media)
+```
 
-### Mobile app
+## Project Structure
 
-- polished multi-screen mobile experience with auth, home, history, contacts, and settings
-- account creation and sign-in against the backend
-- emergency contact setup with phone and email
-- Pocket Mode on/off
-- travel timer auto-activation
-- daily scheduled Pocket Mode preference with user-selected start time
-- reboot-aware Android alarm receiver configuration for restoring schedules after restart
-- motion detection using device sensors
-- Android foreground-service support for active Pocket Mode monitoring
-- screen-wake simulation hooks for demo testing
-- countdown + cancel flow
-- local PIN cancel path
-- alarm feedback
-- current location capture
-- intruder photo capture attempt and backend upload endpoint
-- local alert history
-- backend sync for triggered and cancelled alerts
+```
+project-name-pocket-guardian-project-type/
+├── pocket_guardian/              # Flutter mobile app
+│   ├── lib/
+│   │   ├── main.dart            # Entry point with error boundaries
+│   │   └── src/
+│   │       ├── config/          # App configuration
+│   │       ├── models.dart      # Data models
+│   │       ├── screens/         # UI screens
+│   │       ├── services/        # API, storage, logging, connectivity
+│   │       └── widgets/         # Reusable UI components
+│   ├── android/                 # Android native (Kotlin)
+│   ├── ios/                     # iOS configuration
+│   └── test/                    # Widget & unit tests
+├── pocket_guardian_backend/      # Django REST API
+│   ├── alerts/                  # Core app (models, views, services)
+│   ├── pocket_guardian_backend/ # Django project settings
+│   ├── Dockerfile               # Production container
+│   └── requirements.txt         # Python dependencies
+├── docker-compose.yml           # Local development stack
+└── .github/workflows/           # CI/CD pipelines
+```
+
+## Features
+
+### Mobile App
+- **Pocket Mode** — motion-sensor-based theft detection with configurable sensitivity
+- **Lock-screen emergency UI** — native Android activity shown over lock screen
+- **Intruder photo capture** — front camera auto-capture on failed verification
+- **Emergency SMS** — automatic SMS to trusted contact with location
+- **Biometric + PIN verification** — multi-factor alert cancellation
+- **Daily scheduling** — automatic Pocket Mode activation windows
+- **Travel timer** — delayed auto-activation for commuters
+- **Background execution** — foreground service for continuous monitoring
+- **Encrypted storage** — tokens and PINs stored in platform keychain
+
+### Backend
+- **Token-based auth** — with automatic expiration and rotation
+- **Alert management** — create, track, and review alerts with photo evidence
+- **Email notifications** — with photo attachments to guardian contacts
+- **SMS notifications** — via Twilio or MSG91 providers
+- **Guardian dashboard** — web UI for reviewing alerts and locations
+- **Rate limiting** — prevents brute-force authentication attacks
+- **Location tracking** — real-time location pings during active monitoring
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Local Testing (VS Code)](docs/LOCAL_TESTING_VSCODE.md) | Step-by-step VS Code setup, testing commands, launch configs |
+| [Deploy to Google Cloud (FREE)](docs/DEPLOY_GOOGLE_CLOUD.md) | Full Google Cloud Run deployment with $300 free credits |
+| [Security Policy](SECURITY.md) | Vulnerability reporting and security architecture |
+
+---
+
+## Quick Start (Development)
+
+### Prerequisites
+- Flutter SDK 3.32+
+- Python 3.12+
+- Docker & Docker Compose (optional, for backend)
 
 ### Backend
 
-- signup and login APIs with token-based mobile authentication
-- emergency-contact API
-- alert API
-- notification records
-- automatic email notification sending when a contact email is available
-- provider-ready SMS notification interface with a console development provider
-- admin support
-- dashboard at `/api/dashboard/`
-- detail pages at `/api/alerts/<id>/`
-- guardian-friendly dashboard links for latest locations and photo evidence previews
+**Option A: Docker (recommended)**
+```bash
+cd project-name-pocket-guardian-project-type
+docker compose up --build
+```
+Backend available at `http://localhost:8000/api/`
 
-## Project folders
+**Option B: Manual**
+```bash
+cd project-name-pocket-guardian-project-type/pocket_guardian_backend
 
-- `pocket_guardian/` — Flutter app
-- `pocket_guardian_backend/` — Django backend
+# Create virtual environment
+python -m venv .venv && source .venv/bin/activate
 
-## Run the backend
+# Install dependencies
+pip install -r requirements.txt
 
-```powershell
-cd pocket_guardian_backend
+# Set required environment variable
+export DJANGO_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(50))")
+export DJANGO_DEBUG=1
+export DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Run migrations and start server
 python manage.py migrate
 python manage.py runserver
 ```
 
-Dashboard:
+### Flutter App
+```bash
+cd project-name-pocket-guardian-project-type/pocket_guardian
 
-```text
-http://127.0.0.1:8000/api/dashboard/
-```
-
-## Run the Flutter app
-
-```powershell
-cd pocket_guardian
 flutter pub get
 flutter run
 ```
 
-Android emulator uses this backend URL by default:
-
-```text
-http://10.0.2.2:8000/api
+For a physical Android device on the same network:
+```bash
+flutter run --dart-define=POCKET_GUARDIAN_API_URL=http://YOUR_IP:8000/api
 ```
 
-For a real Android phone, run with:
+---
 
-```powershell
-flutter run --dart-define=POCKET_GUARDIAN_API_URL=http://YOUR_LOCAL_IP:8000/api
+## Production Deployment
+
+### Google Cloud Run (Recommended — FREE forever)
+
+Deploy the backend live with a single command, using Cloud Run's always-free tier + a free Neon PostgreSQL database:
+
+```bash
+# 1. Login and set project
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+
+# 2. Deploy from source (one command — builds + deploys)
+cd pocket_guardian_backend
+gcloud run deploy pocket-guardian-backend \
+  --source . \
+  --region asia-south1 \
+  --allow-unauthenticated \
+  --set-env-vars "DJANGO_DEBUG=0" \
+  --set-env-vars "DJANGO_ALLOWED_HOSTS=*" \
+  --set-env-vars "DJANGO_SECRET_KEY=your-generated-secret" \
+  --set-env-vars "^@^DATABASE_URL=your-neon-postgres-url"
+
+# 3. Build Flutter APK pointing to the Cloud Run URL
+cd ../pocket_guardian
+flutter build apk --release \
+  --dart-define=POCKET_GUARDIAN_API_URL=https://YOUR_CLOUD_RUN_URL/api \
+  --dart-define=POCKET_GUARDIAN_ENV=production
 ```
 
-## Email behavior
+Migrations run automatically on startup. **Full beginner walkthrough:** [docs/DEPLOY_GOOGLE_CLOUD.md](docs/DEPLOY_GOOGLE_CLOUD.md)
 
-The backend currently uses Django's console email backend, so emergency emails are printed in the backend terminal during development. To send real email, replace the email settings in `pocket_guardian_backend/settings.py` with SMTP credentials.
+### Docker (Self-hosted)
 
-For deployment, copy `.env.example` values into your real environment and set SMTP credentials there instead of hardcoding secrets.
+#### Backend Deployment
 
-## What still depends on external setup
+#### Environment Variables (required)
 
-These are not missing code features; they require real device or provider access:
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DJANGO_SECRET_KEY` | Cryptographic secret (generate fresh) | `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
+| `DJANGO_DEBUG` | Must be `0` in production | `0` |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated hostnames | `api.yourapp.com` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@host:5432/dbname` |
+| `CORS_ALLOWED_ORIGINS` | Allowed frontend origins | `https://dashboard.yourapp.com` |
 
-- testing motion sensors, camera, and GPS on a physical phone
-- enabling Windows Developer Mode if building Flutter desktop plugins locally
-- adding real SMTP/SMS/push credentials for production delivery
-- operating-system permissions for background camera/location behavior
+See `.env.example` for full list including email and SMS provider credentials.
 
-## Demo PIN
+#### Deploy with Docker
+```bash
+# Build production image
+docker build -t pocket-guardian-backend ./pocket_guardian_backend
 
-The local demo cancel PIN is:
-
-```text
-1234
+# Run with environment
+docker run -d \
+  --name pocket-guardian \
+  -p 8000:8000 \
+  -e DJANGO_SECRET_KEY="your-secret" \
+  -e DJANGO_DEBUG=0 \
+  -e DJANGO_ALLOWED_HOSTS="api.yourapp.com" \
+  -e DATABASE_URL="postgres://..." \
+  pocket-guardian-backend
 ```
+
+#### Database Setup
+```bash
+# Run migrations
+docker exec pocket-guardian python manage.py migrate
+
+# Create admin user
+docker exec -it pocket-guardian python manage.py createsuperuser
+
+# Set up periodic token cleanup (add to cron)
+# 0 3 * * * docker exec pocket-guardian python manage.py cleanup_expired_tokens
+```
+
+### Mobile App Release
+
+#### Android APK/AAB
+```bash
+cd pocket_guardian
+
+# Generate signing key (one-time)
+keytool -genkey -v -keystore pocket-guardian-release.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias pocket_guardian
+
+# Build release
+flutter build appbundle --release \
+  --dart-define=POCKET_GUARDIAN_ENV=production \
+  --dart-define=POCKET_GUARDIAN_API_URL=https://api.yourapp.com/api
+```
+
+Set signing environment variables:
+```bash
+export KEYSTORE_FILE=/path/to/pocket-guardian-release.jks
+export KEYSTORE_PASSWORD=your_password
+export KEY_ALIAS=pocket_guardian
+export KEY_PASSWORD=your_password
+```
+
+#### iOS
+```bash
+flutter build ipa --release \
+  --dart-define=POCKET_GUARDIAN_ENV=production \
+  --dart-define=POCKET_GUARDIAN_API_URL=https://api.yourapp.com/api
+```
+
+---
+
+## Security Architecture
+
+### Authentication Flow
+1. User signs up/logs in via API
+2. Server generates a 64-character hex token stored in `ApiToken` model
+3. Token stored in device keychain (EncryptedSharedPreferences / iOS Keychain)
+4. All API requests authenticated via `Authorization: Token <key>` header
+5. Tokens auto-expire after 30 days (configurable via `API_TOKEN_EXPIRY_SECONDS`)
+6. Expired tokens are rotated on next login
+
+### Rate Limiting
+- Login/signup: 5 attempts per IP per 5-minute window
+- Returns HTTP 429 when exceeded
+
+### Data Protection
+- Security PIN stored in platform encrypted storage (never in SharedPreferences)
+- API tokens stored in Flutter Secure Storage (AES-encrypted)
+- HTTPS enforced in production via `SECURE_SSL_REDIRECT`
+- Security headers (HSTS, X-Frame-Options, CSP) applied in production
+
+### Mobile Security
+- ProGuard/R8 code shrinking enabled for release builds
+- No hardcoded secrets or credentials in source code
+- Debug builds use separate application ID suffix (`.debug`)
+
+---
+
+## CI/CD
+
+GitHub Actions workflows are configured for:
+
+| Workflow | Trigger | Steps |
+|----------|---------|-------|
+| `backend-ci.yml` | Push/PR to backend code | Lint (ruff), test (PostgreSQL), security audit |
+| `flutter-ci.yml` | Push/PR to Flutter code | Analyze, format check, test, build APK, build iOS |
+
+---
+
+## Testing
+
+### Backend
+```bash
+cd pocket_guardian_backend
+python manage.py test
+```
+
+### Flutter
+```bash
+cd pocket_guardian
+flutter test
+```
+
+---
+
+## Maintenance
+
+### Token Cleanup
+Run periodically to remove expired tokens:
+```bash
+python manage.py cleanup_expired_tokens
+```
+
+### Database Backups
+```bash
+pg_dump -h localhost -U guardian pocket_guardian > backup_$(date +%Y%m%d).sql
+```
+
+### Monitoring Checklist
+- [ ] Backend health endpoint responds (`/api/dashboard/`)
+- [ ] Database connections healthy
+- [ ] Email delivery working (check notification records)
+- [ ] SMS delivery working (check notification records)
+- [ ] Alert photo uploads succeeding
+- [ ] Token cleanup cron running
+
+---
+
+## Device Testing Requirements
+
+Before release, test on physical devices for:
+- [ ] Alarm triggers correctly after motion detection
+- [ ] Lock-screen emergency activity appears
+- [ ] Intruder photo captures with front camera
+- [ ] SMS sends to emergency contact
+- [ ] Background service survives battery optimization
+- [ ] Daily schedule activates after device reboot
+- [ ] Biometric verification works on supported devices
+- [ ] Custom ringtone plays correctly
+- [ ] Location accuracy under different modes
+
+Test on at least 2 different Android brands (Samsung, Pixel, Xiaomi, etc.) due to varying battery optimization behaviors.
+
+---
+
+## Author
+
+**Rishi** — [@RishiPlaysCodes](https://github.com/RishiPlaysCodes)
+
+---
+
+## License
+
+Private — All rights reserved.
