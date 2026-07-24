@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -11,7 +12,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import Alert, ApiToken, EmergencyContact, LocationPing, NotificationRecord
+from .rate_limiter import auth_rate_limiter, get_client_ip
 from .services import process_notification
+
+logger = logging.getLogger(__name__)
 
 
 def _json_body(request):
@@ -26,18 +30,40 @@ def _bad_request(message):
 
 
 def _request_user(request):
+    """Authenticate request via Authorization header token.
+    
+    Returns None if:
+    - No Authorization header present
+    - Token not found in database
+    - Token has expired
+    """
     header = request.headers.get("Authorization", "")
     if not header.startswith("Token "):
         return None
-    token = ApiToken.objects.select_related("user").filter(
-        key=header.removeprefix("Token ").strip()
-    ).first()
-    return token.user if token is not None else None
+    token_key = header.removeprefix("Token ").strip()
+    if not token_key:
+        return None
+    token = ApiToken.objects.select_related("user").filter(key=token_key).first()
+    if token is None:
+        return None
+    if token.is_expired:
+        logger.warning("Expired token used by user %s", token.user.username)
+        return None
+    # Update last_used timestamp (fire-and-forget, don't block request)
+    token.touch()
+    return token.user
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def signup(request):
+    client_ip = get_client_ip(request)
+    if auth_rate_limiter.is_rate_limited(f"signup:{client_ip}"):
+        return JsonResponse(
+            {"error": "Too many attempts. Please try again later."},
+            status=429,
+        )
+
     payload = _json_body(request)
     if payload is None:
         return _bad_request("Invalid JSON body.")
@@ -46,11 +72,17 @@ def signup(request):
     password = payload.get("password", "")
     if not username or not password:
         return _bad_request("username and password are required.")
+    if len(username) < 3 or len(username) > 30:
+        return _bad_request("username must be 3-30 characters.")
+    if len(password) < 8:
+        return _bad_request("password must be at least 8 characters.")
     if User.objects.filter(username=username).exists():
+        auth_rate_limiter.record_attempt(f"signup:{client_ip}")
         return _bad_request("username already exists.")
 
     user = User.objects.create_user(username=username, password=password)
     token, _ = ApiToken.objects.get_or_create(user=user)
+    logger.info("New user registered: %s from %s", username, client_ip)
     return JsonResponse(
         {"id": user.id, "username": user.username, "token": token.key},
         status=201,
@@ -60,6 +92,13 @@ def signup(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def login(request):
+    client_ip = get_client_ip(request)
+    if auth_rate_limiter.is_rate_limited(f"login:{client_ip}"):
+        return JsonResponse(
+            {"error": "Too many failed attempts. Please try again later."},
+            status=429,
+        )
+
     payload = _json_body(request)
     if payload is None:
         return _bad_request("Invalid JSON body.")
@@ -69,9 +108,17 @@ def login(request):
         password=payload.get("password"),
     )
     if user is None:
+        auth_rate_limiter.record_attempt(f"login:{client_ip}")
+        logger.warning("Failed login attempt for '%s' from %s", payload.get("username", ""), client_ip)
         return JsonResponse({"error": "Invalid credentials."}, status=401)
 
+    auth_rate_limiter.reset(f"login:{client_ip}")
     token, _ = ApiToken.objects.get_or_create(user=user)
+    # Rotate token if it's expired
+    if token.is_expired:
+        token.rotate()
+        logger.info("Token rotated for user: %s", user.username)
+    logger.info("User logged in: %s from %s", user.username, client_ip)
     return JsonResponse({"id": user.id, "username": user.username, "token": token.key})
 
 

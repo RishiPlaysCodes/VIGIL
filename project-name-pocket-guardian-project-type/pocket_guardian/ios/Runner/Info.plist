@@ -26,6 +26,29 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+
+	<!-- Privacy Usage Descriptions (required for App Store) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Pocket Guardian uses the camera to capture evidence when an unauthorized phone access is detected.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pocket Guardian needs your location to include it in emergency alerts sent to your trusted contacts.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Pocket Guardian needs background location access to track your device during active protection mode and include location in emergency alerts.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Pocket Guardian needs background location access to track your device during active protection mode.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Pocket Guardian uses Face ID to verify device ownership and cancel security alerts.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Pocket Guardian monitors device motion to detect unauthorized phone removal from your pocket.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pocket Guardian requires microphone access for camera initialization during evidence capture.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../models.dart';
 import '../widgets/section_card.dart';
+import 'pin_setup_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -27,6 +28,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onRemovalGraceChanged,
     required this.onDailyScheduleChanged,
     required this.onRequestLocationPermission,
+    required this.onPinChanged,
     required this.onLogout,
   });
 
@@ -50,6 +52,7 @@ class SettingsScreen extends StatelessWidget {
   final ValueChanged<int> onRemovalGraceChanged;
   final ValueChanged<DailySchedule> onDailyScheduleChanged;
   final Future<void> Function() onRequestLocationPermission;
+  final Future<void> Function() onPinChanged;
   final Future<void> Function() onLogout;
 
   @override
@@ -182,7 +185,7 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               children: [
                 DropdownButtonFormField<SecurityLevel>(
-                  initialValue: securityLevel,
+                  value: securityLevel,
                   decoration: const InputDecoration(labelText: 'Battery / security mode'),
                   items: const [
                     DropdownMenuItem(
@@ -206,7 +209,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<LocationMode>(
-                  initialValue: locationMode,
+                  value: locationMode,
                   decoration: const InputDecoration(labelText: 'Location sharing'),
                   items: const [
                     DropdownMenuItem(
@@ -236,7 +239,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
-                  initialValue: removalGraceSeconds,
+                  value: removalGraceSeconds,
                   decoration: const InputDecoration(
                     labelText: 'Grace after phone leaves pocket',
                   ),
@@ -254,7 +257,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<VerificationMode>(
-                  initialValue: verificationMode,
+                  value: verificationMode,
                   decoration: const InputDecoration(labelText: 'Verification'),
                   items: const [
                     DropdownMenuItem(
@@ -372,6 +375,33 @@ class SettingsScreen extends StatelessWidget {
             child: Text(
               'Camera, location, and background permissions require clear consent. '
               'Police are not auto-contacted in this MVP.',
+            ),
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Security PIN',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Your security PIN is used to cancel alerts during the countdown.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await showDialog<bool>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => const PinSetupDialog(),
+                    );
+                    if (result == true) {
+                      onPinChanged();
+                    }
+                  },
+                  icon: const Icon(Icons.pin_outlined),
+                  label: const Text('Change Security PIN'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

@@ -1,2 +1,17 @@
+# Core
 Django==6.0.4
 Pillow==11.3.0
+
+# Database
+dj-database-url==2.3.0
+psycopg[binary]==3.2.6
+
+# Security & CORS
+django-cors-headers==4.7.0
+
+# Production server
+gunicorn==23.0.0
+whitenoise==6.9.0
+
+# Environment management
+python-dotenv==1.1.0
