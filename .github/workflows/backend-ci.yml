@@ -1,0 +1,90 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'project-name-pocket-guardian-project-type/pocket_guardian_backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'project-name-pocket-guardian-project-type/pocket_guardian_backend/**'
+
+defaults:
+  run:
+    working-directory: project-name-pocket-guardian-project-type/pocket_guardian_backend
+
+env:
+  DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+  DJANGO_DEBUG: "1"
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pocket_guardian_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-django
+
+      - name: Lint with Ruff
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/pocket_guardian_test
+
+      - name: Run tests
+        run: python manage.py test --verbosity=2
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/pocket_guardian_test
+
+  security-check:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install safety
+        run: pip install safety pip-audit
+
+      - name: Check for known vulnerabilities
+        run: pip-audit -r project-name-pocket-guardian-project-type/pocket_guardian_backend/requirements.txt
+        continue-on-error: true

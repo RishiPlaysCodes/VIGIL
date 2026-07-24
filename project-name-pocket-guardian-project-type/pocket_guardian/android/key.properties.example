@@ -1,0 +1,13 @@
+# Signing configuration for release builds.
+# Copy this file to key.properties and fill in your values.
+# NEVER commit key.properties to version control.
+#
+# Generate a keystore:
+#   keytool -genkey -v -keystore pocket-guardian-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias pocket_guardian
+
+storePassword=your_keystore_password
+keyPassword=your_key_password
+keyAlias=pocket_guardian
+storeFile=/path/to/pocket-guardian-release.jks
