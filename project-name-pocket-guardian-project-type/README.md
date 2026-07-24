@@ -66,6 +66,16 @@ project-name-pocket-guardian-project-type/
 
 ---
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Local Testing (VS Code)](docs/LOCAL_TESTING_VSCODE.md) | Step-by-step VS Code setup, testing commands, launch configs |
+| [Deploy to Google Cloud (FREE)](docs/DEPLOY_GOOGLE_CLOUD.md) | Full Google Cloud Run deployment with $300 free credits |
+| [Security Policy](SECURITY.md) | Vulnerability reporting and security architecture |
+
+---
+
 ## Quick Start (Development)
 
 ### Prerequisites
@@ -119,7 +129,36 @@ flutter run --dart-define=POCKET_GUARDIAN_API_URL=http://YOUR_IP:8000/api
 
 ## Production Deployment
 
-### Backend Deployment
+### Google Cloud (Recommended — FREE)
+
+Deploy the backend to Google Cloud Run using the **$300 free trial credits**:
+
+```bash
+# 1. Install gcloud CLI and login
+gcloud auth login
+gcloud config set project pocket-guardian-prod
+
+# 2. Enable APIs
+gcloud services enable run.googleapis.com sqladmin.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+
+# 3. Build & deploy (from pocket_guardian_backend directory)
+gcloud builds submit --tag asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest
+gcloud run deploy pocket-guardian-backend \
+  --image=asia-south1-docker.pkg.dev/pocket-guardian-prod/pocket-guardian/backend:latest \
+  --region=asia-south1 \
+  --allow-unauthenticated
+
+# 4. Build Flutter APK pointing to Cloud Run URL
+flutter build apk --release \
+  --dart-define=POCKET_GUARDIAN_API_URL=https://YOUR_CLOUD_RUN_URL/api \
+  --dart-define=POCKET_GUARDIAN_ENV=production
+```
+
+**Full step-by-step guide:** [docs/DEPLOY_GOOGLE_CLOUD.md](docs/DEPLOY_GOOGLE_CLOUD.md)
+
+### Docker (Self-hosted)
+
+#### Backend Deployment
 
 #### Environment Variables (required)
 
@@ -285,6 +324,12 @@ Before release, test on physical devices for:
 - [ ] Location accuracy under different modes
 
 Test on at least 2 different Android brands (Samsung, Pixel, Xiaomi, etc.) due to varying battery optimization behaviors.
+
+---
+
+## Author
+
+**Rishi** — [@RishiPlaysCodes](https://github.com/RishiPlaysCodes)
 
 ---
 
