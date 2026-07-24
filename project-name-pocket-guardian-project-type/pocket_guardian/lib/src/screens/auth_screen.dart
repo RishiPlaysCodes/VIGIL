@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
+import '../services/secure_storage_service.dart';
 import 'home_shell.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -12,9 +12,10 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _usernameController = TextEditingController(text: 'riya');
-  final _passwordController = TextEditingController(text: 'safe-pass-123');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _api = ApiService();
+  final _secureStorage = SecureStorageService.instance;
 
   bool _isLoading = false;
   String? _error;
@@ -26,19 +27,16 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _restoreSession() async {
-    final preferences = await SharedPreferences.getInstance();
-    final userId = preferences.getInt('backend_user_id');
-    final username = preferences.getString('username');
-    final token = preferences.getString('api_token');
-    if (!mounted || userId == null || username == null || token == null) {
+    final session = await _secureStorage.getAuthSession();
+    if (!mounted || session.userId == null || session.username == null || session.token == null) {
       return;
     }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => HomeShell(
-          userId: userId,
-          username: username,
-          token: token,
+          userId: session.userId!,
+          username: session.username!,
+          token: session.token!,
         ),
       ),
     );
@@ -52,6 +50,23 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit({required bool createAccount}) async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    // Client-side validation
+    if (username.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter username and password.');
+      return;
+    }
+    if (username.length < 3) {
+      setState(() => _error = 'Username must be at least 3 characters.');
+      return;
+    }
+    if (createAccount && password.length < 8) {
+      setState(() => _error = 'Password must be at least 8 characters.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -59,21 +74,16 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       final result = createAccount
-          ? await _api.signUp(
-              username: _usernameController.text.trim(),
-              password: _passwordController.text,
-            )
-          : await _api.login(
-              username: _usernameController.text.trim(),
-              password: _passwordController.text,
-            );
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setInt('backend_user_id', result['id'] as int);
-      await preferences.setString('username', result['username'] as String);
-      await preferences.setString('api_token', result['token'] as String);
-      if (!mounted) {
-        return;
-      }
+          ? await _api.signUp(username: username, password: password)
+          : await _api.login(username: username, password: password);
+
+      await _secureStorage.saveAuthSession(
+        userId: result['id'] as int,
+        username: result['username'] as String,
+        token: result['token'] as String,
+      );
+
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => HomeShell(
@@ -83,19 +93,14 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = 'Could not connect. Check backend and try again.';
-      });
+      if (!mounted) return;
+      setState(() => _error = 'Could not connect. Check your network and try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

@@ -1,6 +1,10 @@
+import secrets
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
-import secrets
+from django.utils import timezone
 
 
 class EmergencyContact(models.Model):
@@ -11,9 +15,13 @@ class EmergencyContact(models.Model):
     relationship = models.CharField(max_length=80, blank=True)
     is_primary = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-is_primary", "name"]
+        indexes = [
+            models.Index(fields=["user", "is_primary"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.user.username})"
@@ -23,9 +31,34 @@ class ApiToken(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="api_token")
     key = models.CharField(max_length=64, unique=True, default=secrets.token_hex)
     created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["key"]),
+        ]
 
     def __str__(self) -> str:
         return f"Token for {self.user.username}"
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if token has expired based on settings."""
+        expiry_seconds = getattr(settings, 'API_TOKEN_EXPIRY_SECONDS', 30 * 24 * 3600)
+        expiry_delta = timedelta(seconds=expiry_seconds)
+        return timezone.now() > self.created_at + expiry_delta
+
+    def rotate(self) -> "ApiToken":
+        """Generate a new token key and reset the creation timestamp."""
+        self.key = secrets.token_hex()
+        self.created_at = timezone.now()
+        self.save(update_fields=["key", "created_at"])
+        return self
+
+    def touch(self) -> None:
+        """Update last_used_at timestamp."""
+        self.last_used_at = timezone.now()
+        self.save(update_fields=["last_used_at"])
 
 
 class Alert(models.Model):
@@ -45,6 +78,10 @@ class Alert(models.Model):
 
     class Meta:
         ordering = ["-occurred_at"]
+        indexes = [
+            models.Index(fields=["user", "-occurred_at"]),
+            models.Index(fields=["status"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user.username}: {self.reason} @ {self.occurred_at}"
@@ -78,6 +115,10 @@ class NotificationRecord(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["alert", "channel"]),
+            models.Index(fields=["status"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.channel} {self.status} for alert {self.alert_id}"
@@ -91,6 +132,9 @@ class LocationPing(models.Model):
 
     class Meta:
         ordering = ["-recorded_at"]
+        indexes = [
+            models.Index(fields=["user", "-recorded_at"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user.username}: {self.latitude}, {self.longitude}"

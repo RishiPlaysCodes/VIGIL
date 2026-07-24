@@ -14,10 +14,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
 import '../services/api_service.dart';
+import '../services/secure_storage_service.dart';
+import '../services/logger_service.dart';
+import '../config/app_config.dart';
 import 'auth_screen.dart';
 import 'contacts_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
+import 'pin_setup_screen.dart';
 import 'settings_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -41,13 +45,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final _auth = LocalAuthentication();
   final _audioPlayer = AudioPlayer();
   static const _nativeChannel = MethodChannel('pocket_guardian/native');
-  final _contactNameController = TextEditingController(text: 'Maa');
-  final _contactPhoneController = TextEditingController(text: '+91 98765 43210');
-  final _contactEmailController = TextEditingController(text: 'maa@example.com');
+  final _contactNameController = TextEditingController();
+  final _contactPhoneController = TextEditingController();
+  final _contactEmailController = TextEditingController();
   final _pinController = TextEditingController();
   final List<AlertRecord> _history = [];
 
   SharedPreferences? _preferences;
+  String? _securityPin;
   Timer? _countdownTimer;
   Timer? _autoActivationTimer;
   Timer? _contactSyncDebounce;
@@ -88,6 +93,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _api.token = widget.token;
     _loadSavedData();
+    _loadSecurityPin();
   }
 
   @override
@@ -122,11 +128,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
     setState(() {
       _preferences = preferences;
-      _contactNameController.text = preferences.getString('contact_name') ?? 'Maa';
+      _contactNameController.text = preferences.getString('contact_name') ?? '';
       _contactPhoneController.text =
-          preferences.getString('contact_phone') ?? '+91 98765 43210';
+          preferences.getString('contact_phone') ?? '';
       _contactEmailController.text =
-          preferences.getString('contact_email') ?? 'maa@example.com';
+          preferences.getString('contact_email') ?? '';
       _securityLevel = SecurityLevel.values[
           preferences.getInt('security_level') ?? SecurityLevel.balanced.index];
       _locationMode = LocationMode.values[
@@ -161,6 +167,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
     await _consumeScheduledPocketModeRequest(preferences: preferences);
     await _consumePendingIntruderCapture(preferences: preferences);
+  }
+
+  Future<void> _loadSecurityPin() async {
+    _securityPin = await SecureStorageService.instance.getSecurityPin();
+  }
+
+  Future<void> _showPinSetupPrompt() async {
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PinSetupDialog(isFirstSetup: true),
+    );
+    if (result == true) {
+      await _loadSecurityPin();
+      if (mounted) togglePocketMode(true);
+    }
   }
 
   Future<void> _consumeScheduledPocketModeRequest({
@@ -243,7 +266,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         phone: _contactPhoneController.text.trim(),
         email: _contactEmailController.text.trim(),
       );
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning(
+        'Failed to sync contact to backend',
+        tag: 'Contacts',
+        error: e,
+      );
+    }
   }
 
   Future<void> _saveHistory() async {
@@ -252,6 +281,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void togglePocketMode(bool value) {
+    if (value && (_securityPin == null || _securityPin!.isEmpty)) {
+      // Require PIN setup before enabling pocket mode
+      _showPinSetupPrompt();
+      return;
+    }
     setState(() {
       _pocketModeEnabled = value;
       _screenWakeDetected = false;
@@ -356,10 +390,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         return;
       }
     }
-    if (_pinController.text.trim() != '1234') {
+    if (_securityPin == null || _securityPin!.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Wrong PIN. Use 1234 in demo mode.')),
+          const SnackBar(content: Text('No PIN configured. Set one in Settings.')),
+        );
+      }
+      return;
+    }
+    if (_pinController.text.trim() != _securityPin) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Incorrect PIN. Please try again.')),
         );
       }
       return;
@@ -378,7 +420,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _history.insert(0, record);
     });
     await _saveHistory();
-    await _syncAlert('cancelled');
+    await _syncAlertSafe('cancelled');
     _pinController.clear();
   }
 
@@ -408,14 +450,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _intruderPhotoStatus = photoStatus;
       _statusMessage = 'Alarm active — emergency alert sent.';
     });
-    final alertId = await _syncAlert('triggered');
+    final alertId = await _syncAlertSafe('triggered');
     await _sendEmergencySms();
-    if (_intruderPhotoPath != null) {
-      await _api.uploadAlertPhoto(
-        userId: widget.userId,
-        alertId: alertId,
-        filePath: _intruderPhotoPath!,
-      );
+    if (_intruderPhotoPath != null && alertId != null) {
+      try {
+        await _api.uploadAlertPhoto(
+          userId: widget.userId,
+          alertId: alertId,
+          filePath: _intruderPhotoPath!,
+        );
+      } catch (e) {
+        AppLogger.instance.error('Failed to upload intruder photo', tag: 'Alarm', error: e);
+      }
     }
   }
 
@@ -465,6 +511,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       photoPath: _intruderPhotoStatus,
     );
     return response['id'] as int;
+  }
+
+  /// Safe version of _syncAlert that catches errors and returns null on failure.
+  /// The alarm must always function locally even if the network is down.
+  Future<int?> _syncAlertSafe(String status) async {
+    try {
+      return await _syncAlert(status);
+    } catch (e) {
+      AppLogger.instance.error(
+        'Failed to sync alert to backend',
+        tag: 'Alert',
+        error: e,
+      );
+      return null;
+    }
   }
 
   Future<void> _playAlarmFeedback() async {
@@ -827,7 +888,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         onRemovalGraceChanged: updateRemovalGraceSeconds,
         onDailyScheduleChanged: updateDailySchedule,
         onRequestLocationPermission: _requestLocationPermission,
+        onPinChanged: _loadSecurityPin,
         onLogout: () async {
+          await SecureStorageService.instance.clearAuthSession();
           await _preferences?.remove('backend_user_id');
           await _preferences?.remove('username');
           await _preferences?.remove('api_token');
