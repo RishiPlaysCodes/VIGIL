@@ -98,7 +98,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = e.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Could not connect. Check your network and try again.');
+      setState(() => _error = 'Server is waking up. Please wait 30 seconds and try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -7,7 +7,7 @@ class AppConfig {
   /// Override with: --dart-define=POCKET_GUARDIAN_API_URL=https://api.yourapp.com
   static const String apiBaseUrl = String.fromEnvironment(
     'POCKET_GUARDIAN_API_URL',
-    defaultValue: 'http://10.0.2.2:8000/api',
+    defaultValue: 'https://pocket-guardian-backend.onrender.com/api',
   );
 
   /// Whether the app is running in production mode.
@@ -26,10 +26,10 @@ class AppConfig {
   static const int defaultCountdownSeconds = 10;
 
   /// HTTP request timeout in seconds.
-  static const int httpTimeoutSeconds = 30;
+  static const int httpTimeoutSeconds = 60;
 
   /// Maximum retry attempts for failed API calls.
-  static const int maxRetryAttempts = 3;
+  static const int maxRetryAttempts = 2;
 
   /// Location update distance filter in meters.
   static const int locationDistanceFilterMeters = 10;
