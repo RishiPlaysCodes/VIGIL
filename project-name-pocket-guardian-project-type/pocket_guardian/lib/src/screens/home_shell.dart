@@ -228,7 +228,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _intruderPhotoPath = nativePhotoPath;
       if (mounted) {
         setState(() => _intruderPhotoStatus =
-            'Captured: ${nativePhotoPath.split('\\').last}');
+            'Captured: ${nativePhotoPath.split(RegExp(r'[/\\]')).last}');
       }
       final nativeAlertId = store.getInt('native_alert_id');
       if (nativeAlertId != null) {
@@ -828,7 +828,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       await controller.initialize();
       final photo = await controller.takePicture();
       _intruderPhotoPath = photo.path;
-      return 'Captured: ${photo.path.split('\\').last}';
+      return 'Captured: ${photo.path.split(RegExp(r'[/\\]')).last}';
     } on CameraException catch (error) {
       return 'Camera unavailable: ${error.code}';
     } catch (_) {
