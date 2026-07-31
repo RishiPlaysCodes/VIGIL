@@ -87,6 +87,20 @@ class ApiService {
     );
   }
 
+  /// Wakes up the backend (Render free tier sleeps after inactivity).
+  /// Fire-and-forget: call this early (e.g. on auth screen load) so the
+  /// server is awake by the time the user submits credentials.
+  Future<void> warmUp() async {
+    try {
+      await _client
+          .get(Uri.parse('$baseUrl/dashboard/'))
+          .timeout(const Duration(seconds: 90));
+      _logger.info('Backend warm-up complete', tag: 'API');
+    } catch (_) {
+      // Ignore — this is best-effort.
+    }
+  }
+
   // ─── Contacts ───────────────────────────────────────────────────────────
 
   Future<void> syncContact({

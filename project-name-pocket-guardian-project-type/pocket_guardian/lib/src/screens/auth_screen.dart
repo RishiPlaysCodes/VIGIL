@@ -24,6 +24,8 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() {
     super.initState();
     _restoreSession();
+    // Wake the backend early so login is fast when the user submits.
+    _api.warmUp();
   }
 
   Future<void> _restoreSession() async {
@@ -98,7 +100,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = e.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Could not connect. Check your network and try again.');
+      setState(() => _error = 'Server is waking up. Please wait 30 seconds and try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -195,6 +197,16 @@ class _AuthScreenState extends State<AuthScreen> {
                     onPressed: _isLoading ? null : () => _submit(createAccount: true),
                     child: const Text('Create account'),
                   ),
+                  if (_isLoading) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: Text(
+                        'Connecting to server... first launch can take up to a minute.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
                 ],
                 ),
               ),
